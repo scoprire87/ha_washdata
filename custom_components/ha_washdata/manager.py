@@ -4540,7 +4540,7 @@ class WashDataManager:
         self._notify_update()
         self._logger.info("Manual program cleared, reverting to auto-detection")
 
- async def async_force_active_profile(self, profile_name: str) -> None:
+    async def async_force_active_profile(self, profile_name: str) -> None:
         """Force a profile on the active cycle from external early-recognition logic.
 
         Designed to be called by automations that identify the program before
@@ -4558,7 +4558,7 @@ class WashDataManager:
             self._logger.info("force_active_profile: forced profile '%s'", profile_name)
         self._notify_update()
      
-async def _run_post_cycle_processing(self) -> None:
+    async def _run_post_cycle_processing(self) -> None:
         """Run post-cycle processing (merge fragments, split anomalies)."""
         try:
             # User Feedback: Use 5 hour lookback and configured gap settings
