@@ -247,3 +247,53 @@ trim_cycle:
           max: 86400
           step: 1
           mode: box
+
+pause_cycle:
+  name: Pause Cycle
+  description: Pause the current cycle (user-triggered). Protects from watchdog termination.
+  fields:
+    device_id:
+      name: Device
+      description: The WashData device to pause.
+      required: true
+      selector:
+        device:
+          integration: ha_washdata
+
+resume_cycle:
+  name: Resume Cycle
+  description: Resume a user-paused cycle.
+  fields:
+    device_id:
+      name: Device
+      description: The WashData device to resume.
+      required: true
+      selector:
+        device:
+          integration: ha_washdata
+
+force_active_profile:
+  name: Force Active Profile
+  description: >
+    Force a specific profile on the currently running cycle. Designed to be
+    called by early-recognition automations that identify the program before
+    WashData's own shape-matcher does. Gives WashData an immediate time-remaining
+    estimate and correct program label without waiting for the full cycle.
+    Pass an empty profile_name to clear the override and return to auto-detection.
+  fields:
+    device_id:
+      name: Device
+      description: The WashData device to target.
+      required: true
+      selector:
+        device:
+          integration: ha_washdata
+    profile_name:
+      name: Profile Name
+      description: >
+        Name of an existing profile to force. Leave empty to clear the manual
+        override and resume automatic detection.
+      required: false
+      default: ""
+      selector:
+        text:
