@@ -4540,7 +4540,25 @@ class WashDataManager:
         self._notify_update()
         self._logger.info("Manual program cleared, reverting to auto-detection")
 
-    async def _run_post_cycle_processing(self) -> None:
+ async def async_force_active_profile(self, profile_name: str) -> None:
+        """Force a profile on the active cycle from external early-recognition logic.
+
+        Designed to be called by automations that identify the program before
+        WashData's own shape-matcher does (e.g. lavastoviglie_v4.yaml).
+        Gives WashData an immediate time-remaining estimate without waiting
+        for the full cycle to complete.
+
+        Pass an empty string to clear the override and return to auto-detection.
+        """
+        if not profile_name:
+            self.clear_manual_program()
+            self._logger.info("force_active_profile: override cleared, reverting to auto-detection")
+        else:
+            self.set_manual_program(profile_name)
+            self._logger.info("force_active_profile: forced profile '%s'", profile_name)
+        self._notify_update()
+     
+async def _run_post_cycle_processing(self) -> None:
         """Run post-cycle processing (merge fragments, split anomalies)."""
         try:
             # User Feedback: Use 5 hour lookback and configured gap settings
