@@ -144,12 +144,8 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         options[CONF_NOTIFY_SERVICE] = data[CONF_NOTIFY_SERVICE]
 
     # Migrate legacy single CONF_NOTIFY_SERVICE into per-event service lists.
-    # Users who configured a notify service before 0.3.x would otherwise lose
-    # their notification settings entirely on upgrade.
     legacy_svc = options.get(CONF_NOTIFY_SERVICE) or data.get(CONF_NOTIFY_SERVICE)
     if legacy_svc and isinstance(legacy_svc, str):
-        # CONF_NOTIFY_EVENTS is a deprecated list of enabled event types.
-        # Only migrate live services when live events were explicitly opted in.
         legacy_events = options.get(CONF_NOTIFY_EVENTS) or data.get(CONF_NOTIFY_EVENTS) or []
         if CONF_NOTIFY_START_SERVICES not in options:
             options[CONF_NOTIFY_START_SERVICES] = [legacy_svc]
@@ -212,8 +208,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         CONF_NOTIFY_LIVE_OVERRUN_PERCENT, DEFAULT_NOTIFY_LIVE_OVERRUN_PERCENT
     )
 
-    # 3.5: notification delivery overhaul (lifecycle tag, timeout, per-type channels,
-    # distinct reminder message).
+    # 3.5: notification delivery overhaul
     options.setdefault(CONF_NOTIFY_TIMEOUT_SECONDS, DEFAULT_NOTIFY_TIMEOUT_SECONDS)
     options.setdefault(CONF_NOTIFY_CHANNEL, DEFAULT_NOTIFY_CHANNEL)
     options.setdefault(CONF_NOTIFY_FINISH_CHANNEL, DEFAULT_NOTIFY_FINISH_CHANNEL)
@@ -230,8 +225,6 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         data.pop(k, None)
 
     # 3.4: drain-spike delayed-start model replaced by band-based DELAY_WAIT.
-    # Strip the obsolete drain knobs so they don't linger in options and
-    # confuse anyone inspecting entry.options.
     for k in (
         "delay_drain_min_power",
         "delay_drain_max_power",
@@ -292,13 +285,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         duration = init_prof.get("avg_duration")
         if name:
             try:
-                # Create the profile immediately
                 await manager.profile_store.create_profile_standalone(
                     name, avg_duration=duration
                 )
                 manager._logger.info("Created initial profile '%s' from onboarding", name)
 
-                # Clean up config entry (remove initial_profile to avoid re-creation or cruft)
                 new_data = {
                     k: v for k, v in entry.data.items() if k != "initial_profile"
                 }
@@ -321,7 +312,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             cycle_id = _require_str(call.data.get("cycle_id"), "cycle_id")
             profile_name = call.data.get("profile_name", "").strip()
 
-            # Find the config entry for this device
             registry = dr.async_get(hass)
             device = registry.async_get(device_id)
             if not device:
@@ -335,7 +325,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             manager = hass.data[DOMAIN][entry_id]
 
-            # Assign existing profile or remove label
             if profile_name:
                 await manager.profile_store.assign_profile_to_cycle(
                     cycle_id, profile_name
@@ -464,7 +453,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             manager = hass.data[DOMAIN][entry_id]
             store = manager.profile_store
 
-            # Determine trim end - default to full cycle duration if not supplied
             raw_end = call.data.get("trim_end_s")
             if raw_end is not None:
                 trim_end_s = max(0.0, float(raw_end))
@@ -537,7 +525,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 entry_id_raw if isinstance(entry_id_raw, str) and entry_id_raw else None
             )
             if entry_id is None:
-                # Prefer device_id for user-facing workflows.
                 device_id = _require_str(device_id_raw, "device_id")
                 registry = dr.async_get(hass)
                 device = registry.async_get(device_id)
@@ -553,7 +540,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             cycle_id = _require_str(call.data.get("cycle_id"), "cycle_id")
             user_confirmed = call.data.get("user_confirmed", False)
             corrected_profile = call.data.get("corrected_profile")
-            corrected_duration = call.data.get("corrected_duration")  # in seconds
+            corrected_duration = call.data.get("corrected_duration")
             notes = call.data.get("notes", "")
             dismiss = call.data.get("dismiss", False)
 
@@ -572,7 +559,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             manager.notify_update()
 
             if success:
-                # Best-effort dismiss the feedback notification if it exists.
                 try:
                     notification_id = f"ha_washdata_feedback_{entry_id}_{cycle_id}"
                     persistent_notification.async_dismiss(hass, notification_id)
@@ -623,7 +609,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
             target = target.resolve()
 
-            # Write export
             target.write_text(json.dumps(payload, indent=2), encoding="utf-8")
             manager._logger.info("Exported ha_washdata entry %s to %s", entry_id, target)
 
@@ -666,7 +651,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             config_updates = await manager.profile_store.async_import_data(payload)
 
-            # Apply imported settings to config entry if present
             entry_data = config_updates.get("entry_data", {})
             entry_options = config_updates.get("entry_options", {})
 
@@ -674,12 +658,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 new_data: dict[str, Any] = dict(entry.data)
                 new_options: dict[str, Any] = dict(entry.options)
 
-                # Only update min_power/off_delay from data (don't overwrite power_sensor/name)
                 for key in [CONF_MIN_POWER, CONF_OFF_DELAY]:
                     if key in entry_data:
                         new_data[key] = entry_data[key]
 
-                # Update all options from import
                 new_options.update(entry_options)
 
                 hass.config_entries.async_update_entry(
@@ -787,18 +769,51 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         hass.services.async_register(DOMAIN, "resume_cycle", handle_resume_cycle)
 
+    # ── NUOVO: force_active_profile ───────────────────────────────────────────
+    # Permette ad automazioni di riconoscimento precoce (es. V4) di comunicare
+    # a WashData il programma identificato prima che il suo matcher interno
+    # lo riconosca, abilitando subito la stima del tempo rimanente.
+    if not hass.services.has_service(DOMAIN, "force_active_profile"):
+
+        async def handle_force_active_profile(call: ServiceCall) -> None:
+            device_id = _require_str(call.data.get("device_id"), "device_id")
+            profile_name = call.data.get("profile_name", "").strip()
+
+            registry = dr.async_get(hass)
+            device = registry.async_get(device_id)
+            if not device:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="device_not_found",
+                )
+            entry_id = next(
+                (eid for eid in device.config_entries if eid in hass.data.get(DOMAIN, {})),
+                None,
+            )
+            if not entry_id:
+                if any(eid for eid in device.config_entries):
+                    raise ServiceValidationError(
+                        translation_domain=DOMAIN,
+                        translation_key="integration_not_loaded",
+                    )
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="no_config_entry",
+                )
+
+            manager = hass.data[DOMAIN][entry_id]
+            await manager.async_force_active_profile(profile_name)
+
+        hass.services.async_register(
+            DOMAIN, "force_active_profile", handle_force_active_profile
+        )
+    # ─────────────────────────────────────────────────────────────────────────
+
     return True
 
 
 def _apply_device_link(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Sync the WashData device's via_device link with the configured option.
-
-    When CONF_LINKED_DEVICE points at an existing device (e.g. the smart plug or
-    appliance), the WashData device is shown as "Connected via <device>" in the
-    HA device registry. Clearing the option removes the link. Stale targets that
-    no longer exist are treated as "no link" so the registry never references a
-    deleted device.
-    """
+    """Sync the WashData device's via_device link with the configured option."""
     registry = dr.async_get(hass)
     washdata_device = registry.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
     if washdata_device is None:
@@ -818,13 +833,9 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload config entry - update settings without interrupting running cycles."""
     manager = hass.data[DOMAIN].get(entry.entry_id)
     if manager:
-        # Update configuration without interrupting detector
         await manager.async_reload_config(entry)
-        # Options changes (e.g. linked device) reload in place without
-        # recreating entities, so apply the device link explicitly here.
         _apply_device_link(hass, entry)
     else:
-        # Full reload if manager not found
         await async_unload_entry(hass, entry)
         await async_setup_entry(hass, entry)
 
